@@ -2,6 +2,7 @@ import "server-only";
 
 import { usdToMillicredits } from "@/config/economy";
 import { catalogEndpoint, getModel, type MediaType } from "@/registry";
+import { KIE_USD_PER_CREDIT, KieError, kieCreate, kieMemberMessage, kieSlot, kieStatus, kieUpload } from "./kie";
 import { assetsOfJobs, ownedAsset, readAsset, removeAsset, saveAsset, type AssetRow } from "./assets";
 import { grant, release, settle } from "./credits";
 import { all, get, parseJson, run, tx } from "./db";
@@ -9,7 +10,7 @@ import { ApiError } from "./errors";
 import { ResultError, mediaFromReply, mediaFromTask } from "./extract";
 import type { JobRow } from "./jobs";
 import { mockDelayMs, mockMedia, mockShouldFail } from "./mock";
-import { TregUnreachable, classify, redact, taskFailure, taskOutcome, tregCall, tregMode, tregTask, tregUploadMedia, type TregTask } from "./treg";
+import { TregUnreachable, classify, downloadResult, redact, taskFailure, taskOutcome, tregCall, tregMode, tregTask, tregUploadMedia, type TregTask } from "./treg";
 
 /**
  * The worker: one loop inside the server process that moves jobs along.
@@ -135,8 +136,8 @@ function sweep(minAgeMs: number) {
   }
 }
 
-/** Google's routes are never answered from a stored copy, so sending twice could charge twice. */
-const replayable = (endpoint: string) => !endpoint.startsWith("google-ai.");
+/** Google's routes and kie.ai are never answered from a stored copy, so sending twice could charge twice. */
+const replayable = (endpoint: string) => !endpoint.startsWith("google-ai.") && !endpoint.startsWith("kie:");
 
 /* --------------------------------- submit --------------------------------- */
 
@@ -152,10 +153,12 @@ async function start(job: JobRow) {
     return;
   }
 
+  if (job.provider === "kie") return startKie(job, attempts);
+
   const stored = parseJson<{ body?: unknown; query?: Record<string, string | number | boolean>; headers?: Record<string, string> }>(job.request, {});
   let body: unknown;
   try {
-    body = await fillAssets(job.user_id, stored.body ?? {});
+    body = await fillAssets(job.user_id, stored.body ?? {}, "treg");
   } catch (err) {
     if (err instanceof ApiError) return fail(job.id, "invalid_request", "A file this generation uses was removed.");
     if (err instanceof TregUnreachable) return retryOrFail(job, attempts); // nothing was sent yet
@@ -220,7 +223,7 @@ const PLACEHOLDER = /asset(-b64)?:(ast_[A-Za-z0-9]{16})/g;
  * The stored request names the member's files by id (`asset:<id>`, `asset-b64:<id>`).
  * Just before sending, each one becomes a short-lived public URL or its bytes in base64.
  */
-async function fillAssets(userId: string, body: unknown): Promise<unknown> {
+async function fillAssets(userId: string, body: unknown, provider: "treg" | "kie"): Promise<unknown> {
   const text = JSON.stringify(body);
   const urls = new Map<string, string>();
   const datas = new Map<string, string>();
@@ -228,7 +231,7 @@ async function fillAssets(userId: string, body: unknown): Promise<unknown> {
     const into = b64 ? datas : urls;
     if (into.has(id)) continue;
     const row = ownedAsset(userId, id); // refuses anything the member does not own
-    into.set(id, b64 ? (await readAsset(row)).toString("base64") : await publicUrl(row));
+    into.set(id, b64 ? (await readAsset(row)).toString("base64") : await publicUrl(row, provider));
   }
   if (urls.size + datas.size === 0) return body;
   const quoted = (s: string) => JSON.stringify(s).slice(1, -1);
@@ -236,9 +239,17 @@ async function fillAssets(userId: string, body: unknown): Promise<unknown> {
 }
 
 /** A URL the provider can fetch the file from. Kept on the asset and reused until it is close to expiring. */
-async function publicUrl(row: AssetRow): Promise<string> {
+async function publicUrl(row: AssetRow, provider: "treg" | "kie"): Promise<string> {
   const now = Date.now();
-  if (row.remote_url && (row.remote_expires_at ?? 0) > now + 3_600_000) return row.remote_url;
+  const mine = (url: string) => (provider === "kie") === KIE_FILE_HOST.test(url);
+  if (row.remote_url && mine(row.remote_url) && (row.remote_expires_at ?? 0) > now + 3_600_000) return row.remote_url;
+  if (provider === "kie") {
+    if (row.bytes > 100 * MB) throw new ResultError("That reference file is too large for this model. Use one under 100 MB.");
+    const ext = (row.mime.split("/")[1] ?? "bin").replace(/[^a-z0-9]/gi, "").slice(0, 8) || "bin";
+    const up = await kieUpload(await readAsset(row), row.mime, `${row.id}.${ext}`);
+    run("UPDATE assets SET remote_url = ?, remote_expires_at = ? WHERE id = ?", up.url, up.expiresAt, row.id);
+    return up.url;
+  }
   if (row.bytes > 30 * MB) throw new ResultError("That reference file is too large for this model. Use one under 30 MB.");
   const url = await tregUploadMedia(await readAsset(row), row.mime);
   run("UPDATE assets SET remote_url = ?, remote_expires_at = ? WHERE id = ?", url, now + 6 * 86_400_000, row.id);
@@ -259,6 +270,7 @@ async function poll(job: JobRow) {
     const files = await mockMedia({ output, prompt: job.prompt, params: parseJson(job.params, {}), count: job.expect_count, seed: job.id });
     return finish(job, files);
   }
+  if (job.provider === "kie") return pollKie(job, output);
 
   const later = (ms: number) => void run("UPDATE jobs SET next_poll_at = ? WHERE id = ? AND status = 'running'", Date.now() + ms, job.id);
 
@@ -289,6 +301,104 @@ async function poll(job: JobRow) {
     files = await mediaFromTask(job.endpoint, task, output, job.expect_count);
   }
   await finish(job, files);
+}
+
+/* ---------------------------------- kie.ai ---------------------------------- */
+
+const KIE_FILE_HOST = /redpandaai\.co/;
+
+/** Credits kie.ai charged, as millionths of a dollar. */
+const creditsToMicro = (credits: number) => Math.round(credits * KIE_USD_PER_CREDIT * 1e6);
+
+/** What to do when kie.ai refuses or drops a call. Never sends again after an answer may have been lost. */
+function kieProblem(job: JobRow, attempts: number, err: KieError) {
+  console.warn(`[worker] ${job.id} ${job.endpoint} (${err.kind}${err.code ? " " + err.code : ""}): ${redact(err.message)}`);
+  switch (err.kind) {
+    case "limit":
+      // Refused before it ran, and it does not count as a try.
+      return void run("UPDATE jobs SET status = 'queued', attempts = MAX(0, attempts - 1), next_poll_at = ? WHERE id = ? AND status = 'running'", Date.now() + 4000, job.id);
+    case "retry":
+    case "unreachable":
+      return retryOrFail(job, attempts);
+    case "ambiguous":
+      // No answer: the task may exist and may be charged. Sending it again could charge twice.
+      return fail(job.id, "interrupted", "The connection to the model dropped. Try again.");
+    case "auth":
+    case "balance":
+      return fail(job.id, "model_unavailable", kieMemberMessage(err));
+    case "invalid":
+      return fail(job.id, "invalid_request", kieMemberMessage(err));
+    default:
+      return fail(job.id, "provider_error", kieMemberMessage(err));
+  }
+}
+
+async function startKie(job: JobRow, attempts: number) {
+  const stored = parseJson<{ body?: unknown }>(job.request, {});
+  let input: unknown;
+  try {
+    input = await fillAssets(job.user_id, stored.body ?? {}, "kie");
+  } catch (err) {
+    if (err instanceof ApiError) return fail(job.id, "invalid_request", "A file this generation uses was removed.");
+    if (err instanceof KieError) return kieProblem(job, attempts, err);
+    throw err;
+  }
+  try {
+    await kieSlot();
+    const { taskId } = await kieCreate(job.endpoint.slice(4), input);
+    run("UPDATE jobs SET treg_call_id = ?, next_poll_at = ? WHERE id = ?", taskId, Date.now() + 4000, job.id);
+  } catch (err) {
+    if (err instanceof KieError) return kieProblem(job, attempts, err);
+    throw err;
+  }
+}
+
+/** Seconds between polls: quick at first, then calmer for long jobs. */
+const kiePause = (job: JobRow) => {
+  const age = Date.now() - (job.started_at ?? job.created_at);
+  return age < 30_000 ? 3000 : age < 120_000 ? 5000 : 10_000;
+};
+
+async function pollKie(job: JobRow, output: MediaType) {
+  const later = (ms: number) => void run("UPDATE jobs SET next_poll_at = ? WHERE id = ? AND status = 'running'", Date.now() + ms, job.id);
+  let task;
+  try {
+    task = await kieStatus(job.treg_call_id!);
+  } catch (err) {
+    if (!(err instanceof KieError)) throw err;
+    // The task is gone, or the key no longer sees it.
+    if (err.kind === "invalid") return fail(job.id, "provider_error", "The model lost track of this one. Try again.");
+    console.warn(`[worker] ${job.id} status (${err.kind}): ${redact(err.message)}`);
+    if (expired(job, output)) return fail(job.id, "timeout", TOO_SLOW);
+    return later(5000);
+  }
+
+  if (task.state === "running") {
+    if (expired(job, output)) return fail(job.id, "timeout", TOO_SLOW);
+    return later(kiePause(job));
+  }
+  const micro = task.credits != null ? creditsToMicro(task.credits) : null;
+  if (task.state === "failed") {
+    console.warn(`[worker] ${job.id} ${job.endpoint} failed at kie.ai: ${redact(task.message)}`);
+    if (micro) run("UPDATE jobs SET provider_cost_micro = ? WHERE id = ?", micro, job.id);
+    return fail(job.id, "provider_error", task.message || "The model could not make this one. Try again.");
+  }
+
+  if (task.urls.length === 0) return fail(job.id, "provider_error", "The model finished but returned no file. Try again.");
+  const files: Buffer[] = [];
+  for (const url of task.urls.slice(0, Math.max(1, job.expect_count))) {
+    try {
+      files.push(await downloadResult(url));
+    } catch {
+      await sleep(3000);
+      try {
+        files.push(await downloadResult(url));
+      } catch {
+        throw new ResultError("The model made the file but we could not download it. Try again.");
+      }
+    }
+  }
+  await finish(job, files, null, micro);
 }
 
 /* ---------------------------------- ending --------------------------------- */
@@ -340,7 +450,7 @@ async function finish(job: JobRow, files: Buffer[], callId: string | null = null
     let cost = job.cost;
     // A provider that bills by usage reports the real price with the result. The quote was
     // the most it could be, so charge the real price and give back the rest.
-    if (costMicro != null && costMicro > 0 && catalogEndpoint(job.endpoint)?.cost?.settle === "usage") {
+    if (costMicro != null && costMicro > 0 && (job.provider === "kie" || catalogEndpoint(job.endpoint)?.cost?.settle === "usage")) {
       const real = usdToMillicredits(costMicro / 1e6);
       if (real < cost) {
         grant(job.user_id, "refund", cost - real, "Refund: the model used less than quoted", job.id);

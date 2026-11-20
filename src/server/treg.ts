@@ -3,6 +3,7 @@ import "server-only";
 import { lookup } from "node:dns/promises";
 import net from "node:net";
 import { catalogEndpoint } from "@/registry/quote";
+import { kieKey } from "./kie";
 import { getSecret, getSetting } from "./settings";
 
 /**
@@ -28,8 +29,11 @@ export function tregMode(): "live" | "mock" {
   const mode = getSetting("treg_mode") || process.env.TREG_MODE;
   if (mode === "mock") return "mock";
   if (mode === "live") return "live";
-  return token() ? "live" : "mock";
+  return token() || kieKey() ? "live" : "mock";
 }
+
+/** True when a Treg key is set (panel or environment). */
+export const tregKeySet = () => Boolean(token());
 
 /** Strips anything that could carry a credential before text reaches a log. */
 export function redact(text: string): string {

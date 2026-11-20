@@ -5,10 +5,16 @@
  */
 import { musicModels, speechModels } from "./audio";
 import { imageModels } from "./image";
+import { kieModels } from "./kie/models";
 import { videoModels } from "./video";
 import type { ModelDef } from "./types";
 
-export const models: ModelDef[] = [...imageModels, ...videoModels, ...speechModels, ...musicModels];
+const base: ModelDef[] = [...imageModels, ...videoModels, ...speechModels, ...musicModels];
+const kieById = new Map(kieModels.map((m) => [m.id, m]));
+const baseIds = new Set(base.map((m) => m.id));
+
+/** kie.ai models take the place of the base models with the same id, and add the new ones. */
+export const models: ModelDef[] = [...base.map((m) => kieById.get(m.id) ?? m), ...kieModels.filter((m) => !baseIds.has(m.id))];
 
 const byId = new Map(models.map((m) => [m.id, m]));
 
@@ -29,4 +35,4 @@ export function defaultModel(surface: string): ModelDef | undefined {
 
 export * from "./types";
 export * from "./logic";
-export { quoteUsd, catalogEndpoint } from "./quote";
+export { quoteUsd, catalogEndpoint, knownEndpoint, isKie } from "./quote";

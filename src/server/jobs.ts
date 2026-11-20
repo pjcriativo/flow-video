@@ -1,12 +1,13 @@
 import "server-only";
 
 import { MAX_BATCH, formatCredits, planOf } from "@/config/economy";
-import { assetRef, catalogEndpoint, getModel, quoteJob, resolveValues, visibleSlots, type Filled, type Kind, type MediaRef, type MediaType, type ModelDef, type Values } from "@/registry";
+import { assetRef, getModel, isKie, knownEndpoint, quoteJob, resolveValues, visibleSlots, type Filled, type Kind, type MediaRef, type MediaType, type ModelDef, type Values } from "@/registry";
 import { assetsOfJobs, ownedAsset, removeAsset, toAsset, type Asset, type AssetRow } from "./assets";
 import type { User } from "./auth";
 import { balance, hold, release } from "./credits";
 import { all, get, newId, parseJson, run, tx, type Param } from "./db";
 import { ApiError, badRequest, notFound } from "./errors";
+import { providerReady } from "./providers";
 import { getSetting } from "./settings";
 import { tregMode } from "./treg";
 import { kick, outputOf } from "./worker";
@@ -41,6 +42,7 @@ export interface JobRow {
   cost: number;
   est_usd: number;
   treg_call_id: string | null;
+  provider: string;
   provider_cost_micro: number | null;
   error_code: string | null;
   error_message: string | null;
@@ -189,6 +191,7 @@ export function submitJobs(user: User, input: SubmitInput): Job[] {
   const model = getModel(typeof input.modelId === "string" ? input.modelId : null);
   if (!model) throw badRequest("Pick a model first.");
   if (model.status !== "available") throw new ApiError(409, "model_unavailable", model.statusNote ?? `${model.name} is not available right now.`);
+  if (!providerReady(model.provider ?? "treg")) throw new ApiError(409, "model_unavailable", `${model.name} is not available right now.`);
 
   let prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
   if (!model.prompt) prompt = "";
@@ -221,7 +224,9 @@ export function submitJobs(user: User, input: SubmitInput): Job[] {
 
   const asked = Math.floor(Number(input.count)) || 1;
   const quote = quoteJob(model, { prompt, values, media, filled, count: model.batch.native ? asked : Math.min(asked, MAX_BATCH) });
-  if (!catalogEndpoint(quote.request.endpoint)) throw new ApiError(409, "model_unavailable", `${model.name} is not available right now.`);
+  if (!knownEndpoint(quote.request.endpoint)) throw new ApiError(409, "model_unavailable", `${model.name} is not available right now.`);
+  // A price that is not in the table is never sold: nothing may run without a known cost.
+  if (isKie(quote.request.endpoint) && !quote.exact) throw new ApiError(409, "model_unavailable", `${model.name} is not available with these settings.`);
 
   const surface = typeof input.surface === "string" && /^[a-z0-9-]{1,40}$/.test(input.surface) ? input.surface : (model.surfaces[0] ?? model.kind);
   const metaText = isRecord(input.meta) ? JSON.stringify(input.meta) : "{}";
@@ -252,8 +257,8 @@ export function submitJobs(user: User, input: SubmitInput): Job[] {
       ids.push(id);
       run(
         `INSERT INTO jobs (id, user_id, kind, surface, model_id, status, prompt, params, inputs, endpoint, request,
-                           expect_count, cost, est_usd, batch_id, meta, created_at)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                           expect_count, cost, est_usd, batch_id, meta, created_at, provider)
+         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         user.id,
         model.kind,
@@ -270,6 +275,7 @@ export function submitJobs(user: User, input: SubmitInput): Job[] {
         batchId,
         metaText.length <= 4000 ? metaText : "{}",
         now + i, // keeps a batch in a stable order
+        model.provider ?? "treg",
       );
       hold(user.id, id, quote.perJob, model.name);
     }

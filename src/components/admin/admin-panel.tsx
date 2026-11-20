@@ -881,6 +881,7 @@ interface AdminModel {
   kind: string;
   surfaces: string[];
   badges: string[];
+  provider: string;
   status: string;
   enabled: boolean;
 }
@@ -923,14 +924,14 @@ function ModelsTab() {
             <h2 className="mb-2 text-base font-semibold">
               {KIND_LABEL[k]} <span className="text-sm font-normal text-white/40">{on} de {list.length} ligados</span>
             </h2>
-            <Table heads={["Modelo", "Fabricante", "Estúdios", "Situação", ""]}>
+            <Table heads={["Modelo", "Fabricante", "Provedor", "Situação", ""]}>
               {list.map((m) => (
                 <tr key={m.id} className="border-t border-white/10">
                   <td className="px-4 py-3">
                     {m.name} <span className="text-xs text-white/40">({m.id})</span>
                   </td>
                   <td className="px-4 py-3 text-white/60">{m.vendor}</td>
-                  <td className="px-4 py-3 text-white/60">{m.surfaces.join(", ")}</td>
+                  <td className="px-4 py-3 text-white/60">{m.provider === "kie" ? "kie.ai" : "Treg"}</td>
                   <td className="px-4 py-3">
                     {!m.enabled ? <Tag tone="red">desligado</Tag> : m.status === "available" ? <Tag tone="green">disponível</Tag> : <Tag tone="amber">{m.status === "soon" ? "em breve" : "fora do ar"}</Tag>}
                   </td>
@@ -959,7 +960,14 @@ interface SecretStatus {
   source: "panel" | "env" | "none";
   last4: string;
 }
+interface KieAccount {
+  configured: boolean;
+  credits: number | null;
+  usd: number | null;
+  error: string;
+}
 interface SystemInfo {
+  kie: KieAccount;
   mode: string;
   modeSetting: string;
   secrets: SecretStatus[];
@@ -995,7 +1003,7 @@ function SystemTab() {
   );
   return (
     <div className="space-y-6">
-      <KeysCard secrets={data.secrets} />
+      <KeysCard secrets={data.secrets} kie={data.kie} />
       <ModeAndPricing data={data} />
       <div>
         <h2 className="mb-2 text-base font-semibold">Estado do servidor</h2>
@@ -1014,7 +1022,7 @@ function SystemTab() {
   );
 }
 
-function KeysCard({ secrets }: { secrets: SecretStatus[] }) {
+function KeysCard({ secrets, kie }: { secrets: SecretStatus[]; kie: KieAccount }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState<{ name: string; text: string; ok: boolean } | null>(null);
@@ -1039,6 +1047,23 @@ function KeysCard({ secrets }: { secrets: SecretStatus[] }) {
       <p className="mb-3 text-white/50">
         As chaves ficam criptografadas no banco e nunca são mostradas de volta (só os 4 últimos caracteres). Uma chave salva aqui vale mais que a do arquivo <code>.env.local</code>.
       </p>
+      {kie.configured && (
+        <div className={`${card} mb-3 flex flex-wrap items-center justify-between gap-2`}>
+          <div>
+            <div className="font-medium">Saldo no kie.ai</div>
+            {kie.credits === null ? (
+              <div className="text-red-400">{kie.error || "Não foi possível ler o saldo."}</div>
+            ) : (
+              <div className="text-white/70">
+                <b className="text-white tabular-nums">{num(kie.credits, 1)}</b> créditos · <b className="text-white tabular-nums">{usd(kie.usd ?? 0)}</b>
+              </div>
+            )}
+          </div>
+          <button className={ghost} onClick={() => mutate(SYSTEM_KEY, fetcher(SYSTEM_KEY + "&refresh=1"), { revalidate: false })}>
+            Atualizar / testar conexão
+          </button>
+        </div>
+      )}
       <div className={`${card} space-y-4`}>
         {secrets.map((k) => (
           <div key={k.name} className="space-y-2 border-t border-white/10 pt-4 first:border-t-0 first:pt-0">

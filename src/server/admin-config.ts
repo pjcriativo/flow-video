@@ -10,6 +10,7 @@ import { adminEmails, audit } from "./admin";
 import { applyPlanOverrides, dataDir, get, run, tx } from "./db";
 import { badRequest, notFound } from "./errors";
 import { dailyBudgetUsd } from "./jobs";
+import { KIE_USD_PER_CREDIT, kieBalance, kieKey } from "./kie";
 import { clearSecret, deleteSetting, getSetting, secretInfo, setSecret, setSetting } from "./settings";
 import { tregMode } from "./treg";
 
@@ -17,10 +18,27 @@ import { tregMode } from "./treg";
 
 export const SECRETS = {
   treg_token: { label: "Gateway Treg (geração de imagem, vídeo e áudio)", env: "TREG_TOKEN", connected: true },
-  kie_api_key: { label: "kie.ai", env: "KIE_API_KEY", connected: false },
+  kie_api_key: { label: "kie.ai (imagem, vídeo, voz e música)", env: "KIE_API_KEY", connected: true },
   higgsfield_api_key: { label: "Higgsfield", env: "HIGGSFIELD_API_KEY", connected: false },
 } as const;
 type SecretName = keyof typeof SECRETS;
+
+/** The kie.ai balance, asked at most once a minute. */
+const balanceCache = ((globalThis as unknown as { __kieBalance?: { at: number; value: { credits: number | null; error: string } } }).__kieBalance ??= { at: 0, value: { credits: null, error: "" } });
+
+export async function kieAccount(force = false) {
+  if (!kieKey()) return { configured: false, credits: null as number | null, usd: null as number | null, error: "" };
+  if (force || Date.now() - balanceCache.at > 60_000) {
+    try {
+      balanceCache.value = { credits: await kieBalance(), error: "" };
+    } catch (err) {
+      balanceCache.value = { credits: null, error: err instanceof Error ? err.message.slice(0, 200) : "unknown error" };
+    }
+    balanceCache.at = Date.now();
+  }
+  const { credits, error } = balanceCache.value;
+  return { configured: true, credits, usd: credits === null ? null : Math.round(credits * KIE_USD_PER_CREDIT * 100) / 100, error };
+}
 
 export function systemInfo() {
   let dbBytes = 0;
@@ -63,6 +81,7 @@ export function listModels() {
     kind: m.kind,
     surfaces: m.surfaces,
     badges: m.badges ?? [],
+    provider: m.provider ?? "treg",
     status: m.status,
     enabled: !off.has(m.id),
   }));

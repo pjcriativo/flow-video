@@ -1,9 +1,9 @@
 import { adminRoute, listCoupons, listPlans, listReports } from "@/server/admin";
-import { listModels, systemInfo } from "@/server/admin-config";
+import { kieAccount, listModels, systemInfo } from "@/server/admin-config";
 import { notFound } from "@/server/errors";
 
 /** GET /api/admin/data?section=plans|coupons|reports|models|system[&status=open]   Admins only. */
-export const GET = adminRoute(({ req }) => {
+export const GET = adminRoute(async ({ req }) => {
   const q = req.nextUrl.searchParams;
   switch (q.get("section")) {
     case "plans":
@@ -15,7 +15,7 @@ export const GET = adminRoute(({ req }) => {
     case "models":
       return { models: listModels() };
     case "system":
-      return systemInfo();
+      return { ...systemInfo(), kie: await kieAccount(q.get("refresh") === "1") };
     default:
       throw notFound();
   }

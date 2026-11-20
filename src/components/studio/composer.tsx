@@ -8,6 +8,7 @@ import { ButtonLink, cn } from "@/ui";
 import { ControlChip, MoreChip } from "./control-chip";
 import { CountChip } from "./count-chip";
 import { GenerateButton } from "./generate-button";
+import { PriceLine } from "./price-line";
 import { ModelPicker } from "./model-picker";
 import { PromptField } from "./prompt-field";
 import { AttachedStrip, ReferenceChip } from "./reference-chip";
@@ -114,6 +115,7 @@ export function Composer({ studio, placeholder, extra }: { studio: Studio; place
               <CountChip studio={studio} />
               {extra}
             </div>
+            <PriceLine studio={studio} />
           </div>
           <GenerateButton studio={studio} />
         </div>

@@ -102,7 +102,7 @@ export interface BuildContext {
 }
 
 export interface BuiltRequest {
-  /** A Treg endpoint id from `treg-catalog.json`. */
+  /** A Treg endpoint id from `treg-catalog.json`, or `kie:<model>` for a kie.ai model. */
   endpoint: string;
   /** The provider's own request body, unchanged by Treg. */
   body: Record<string, unknown>;
@@ -124,6 +124,8 @@ export interface ModelDef {
   badges?: string[];
   featured?: boolean;
   status: ModelStatus;
+  /** Who runs the model: `treg` (the default) or `kie`. */
+  provider?: "treg" | "kie";
   /** Shown instead of the tagline when the model cannot be used. */
   statusNote?: string;
   /** Which studios and tools list this model: `image`, `video`, `speech`, `music`, `avatar`... */

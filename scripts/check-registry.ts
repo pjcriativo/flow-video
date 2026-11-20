@@ -6,7 +6,7 @@
  * so this runs before every build.
  */
 import { formatCredits, usdToMillicredits } from "../src/config/economy";
-import { catalogEndpoint, matches, models, quoteJob, resolveValues, type Control, type Filled, type ModelDef } from "../src/registry";
+import { catalogEndpoint, knownEndpoint, matches, models, quoteJob, resolveValues, type Control, type Filled, type ModelDef } from "../src/registry";
 
 function candidates(c: Control): unknown[] {
   switch (c.type) {
@@ -62,7 +62,7 @@ for (const model of models) {
           if (sent === undefined) problems.push(`missing required header "${name}" on ${q.request.endpoint}: ${where}`);
           else if (allowed.length && !allowed.includes(sent)) problems.push(`header "${name}: ${sent}" not accepted by ${q.request.endpoint}: ${where}`);
         }
-        if (!catalogEndpoint(q.request.endpoint)) problems.push(`unknown endpoint ${q.request.endpoint}: ${where}`);
+        if (!knownEndpoint(q.request.endpoint)) problems.push(`unknown endpoint ${q.request.endpoint}: ${where}`);
         else if (!q.exact) problems.push(`no price row on ${q.request.endpoint}: ${where}`);
         else if (!(q.usdPerJob > 0)) problems.push(`zero price on ${q.request.endpoint}: ${where}`);
         if (JSON.stringify(q.request).includes("undefined")) problems.push(`undefined in request: ${where}`);
@@ -80,18 +80,34 @@ function expectCredits(label: string, got: number, want: number) {
 
 // Known prices, worked by hand from the provider rate cards.
 expectCredits("FLUX Schnell, 1 image ($0.003)", usdToMillicredits(0.003), 100);
-expectCredits("Veo 3.1 Lite 720p silent 4s ($0.12)", usdToMillicredits(0.12), 3400);
-{
-  const m = models.find((x) => x.id === "veo-3.1-lite")!;
-  const values = resolveValues(m, { duration: "4", resolution: "720p", audio: false }, {});
-  expectCredits("veo-3.1-lite quote", quoteJob(m, { prompt: "x", values, filled: {}, count: 1 }).millicredits, 3400);
-}
 {
   const m = models.find((x) => x.id === "flux-schnell")!;
   const values = resolveValues(m, {}, {});
   expectCredits("flux-schnell quote x1", quoteJob(m, { prompt: "x", values, filled: {}, count: 1 }).millicredits, 100);
   expectCredits("flux-schnell quote x4", quoteJob(m, { prompt: "x", values, filled: {}, count: 4 }).millicredits, 400);
 }
+
+// kie.ai prices that matched real generations exactly (creditsConsumed, 2026-11-20).
+// A real charge is kie credits x $0.005; the member price is that x the margin, in 0.1 credit steps.
+function expectKie(id: string, values: Record<string, string | boolean>, text: string, kieCredits: number, count = 1) {
+  const m = models.find((x) => x.id === id);
+  if (!m) return void problems.push(`missing model ${id}`);
+  const v = resolveValues(m, values, {});
+  const q = quoteJob(m, { prompt: text, values: v, filled: {}, count });
+  const got = Math.round((q.usdPerJob / 0.005) * 100) / 100;
+  if (Math.abs(got - kieCredits) > 0.01) problems.push(`${id} ${JSON.stringify(values)}: expected ${kieCredits} kie credits, got ${got}`);
+}
+expectKie("nano-banana-2", { resolution: "1K" }, "x", 8);
+expectKie("nano-banana-pro", { resolution: "4K" }, "x", 24);
+expectKie("gpt-image-2", { resolution: "2K" }, "x", 10);
+expectKie("veo-3.1-lite", { duration: "4", resolution: "720p" }, "x", 30);
+expectKie("veo-3.1-fast", { duration: "8", resolution: "1080p" }, "x", 65);
+expectKie("kling-3-std", { duration: "3", audio: false }, "x", 45.3);
+expectKie("kling-3-pro", { duration: "5", audio: true }, "x", 151);
+expectKie("wan-3", { duration: "2", resolution: "480P" }, "x", 16);
+expectKie("grok-imagine", { duration: "6", resolution: "480p" }, "x", 14.4);
+expectKie("elevenlabs-v2", {}, "Olá! Este é um teste rápido de voz.", 12);
+expectKie("suno-v6", {}, "x", 12);
 
 const ids = models.map((m) => m.id);
 for (const id of ids) if (ids.indexOf(id) !== ids.lastIndexOf(id)) problems.push(`duplicate model id ${id}`);

@@ -12,10 +12,13 @@ export interface LiveConfig {
   plans: Record<string, { name: string; priceUsd: number; monthlyCredits: number; concurrency: number }>;
   /** Models an admin switched off. They show as offline and cannot be run. */
   disabledModels: string[];
+  /** Providers with no key. Their models show as offline. */
+  providersOff?: string[];
 }
 
 const original = new Map(models.map((m) => [m.id, { status: m.status, note: m.statusNote }]));
 let disabled = new Set<string>();
+let providersOff = new Set<string>();
 
 export function applyConfig(cfg: Partial<LiveConfig> | null | undefined) {
   if (!cfg) return;
@@ -31,13 +34,17 @@ export function applyConfig(cfg: Partial<LiveConfig> | null | undefined) {
     plan.monthlyCredits = p.monthlyCredits;
     plan.concurrency = p.concurrency;
   }
-  if (cfg.disabledModels) {
-    disabled = new Set(cfg.disabledModels);
+  if (cfg.disabledModels) disabled = new Set(cfg.disabledModels);
+  if (cfg.providersOff) providersOff = new Set(cfg.providersOff);
+  if (cfg.disabledModels || cfg.providersOff) {
     for (const m of models) {
       const o = original.get(m.id)!;
       if (disabled.has(m.id)) {
         m.status = "offline";
         m.statusNote = "Temporarily unavailable";
+      } else if (providersOff.has(m.provider ?? "treg")) {
+        m.status = "offline";
+        m.statusNote = "Not connected yet";
       } else {
         m.status = o.status;
         m.statusNote = o.note;
@@ -51,5 +58,6 @@ export function currentConfig(): LiveConfig {
     pricing: { margin: PRICING.margin, usdBrl: PRICING.usdBrl },
     plans: Object.fromEntries(Object.values(PLANS).map((p) => [p.id, { name: p.name, priceUsd: p.priceUsd, monthlyCredits: p.monthlyCredits, concurrency: p.concurrency }])),
     disabledModels: [...disabled],
+    providersOff: [...providersOff],
   };
 }
