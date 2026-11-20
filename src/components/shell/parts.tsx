@@ -1,5 +1,6 @@
 "use client";
 
+import { LOCALES, getLocale, setLocale } from "@/i18n";
 import { Building2, Crown, Languages, Search } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -45,7 +46,7 @@ export function SearchPlate() {
   );
 }
 
-/** The app is in English only for now, and says so. */
+/** English or Portuguese. Portuguese shows prices in reais. */
 export function LanguagePlate() {
   return (
     <Popover>
@@ -54,7 +55,11 @@ export function LanguagePlate() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[200px]">
         <MenuLabel>{navWords.language}</MenuLabel>
-        <MenuItem selected>{navWords.english}</MenuItem>
+        {LOCALES.map((l) => (
+          <MenuItem key={l.id} selected={getLocale() === l.id} onClick={() => setLocale(l.id)}>
+            {l.label}
+          </MenuItem>
+        ))}
         <p className="px-2 pt-1 pb-2 text-xs leading-4 text-text-secondary">{navWords.languageNote}</p>
       </PopoverContent>
     </Popover>

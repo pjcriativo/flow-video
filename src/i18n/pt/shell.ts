@@ -1,0 +1,96 @@
+import { brand } from "@/config/brand";
+import type * as en from "@/content/shell";
+import type { Words } from "./types";
+
+/** Portuguese (Brazil) for the navigation, account menu, bell and footer. */
+export const ptShell: Words<typeof en> = {
+  navMenus: {
+    image: {
+      featuresLabel: "Recursos",
+      features: [
+        { label: "Criar imagem", blurb: "Transforme uma frase em uma imagem" },
+        { label: "Quadros", blurb: "Organize ideias e rode como um fluxo" },
+        { label: "Apps", blurb: "Ferramentas de um clique feitas sobre os modelos" },
+        { label: "Remix", blurb: "Envie uma imagem e receba novas versões" },
+        { label: "Explorar", blurb: "Veja o que as pessoas estão criando agora" },
+        { label: "Biblioteca", blurb: "Tudo o que você criou, em um só lugar" },
+      ],
+      modelsLabel: "Modelos",
+    },
+    video: {
+      featuresLabel: "Recursos",
+      features: [
+        { label: "Criar vídeo", blurb: "Cenas a partir de texto, quadros e referências" },
+        { label: "Planejador de cenas", blurb: "Dirija uma cena com câmera e lente" },
+        { label: "Shorts", blurb: "Do roteiro ao short pronto" },
+        { label: "Campanhas de anúncios", blurb: "Vídeos e imagens de produto para uma marca" },
+        { label: "Remix", blurb: "Um vídeo entra, várias versões saem" },
+        { label: "Concursos", blurb: "Faça um filme e participe do desafio do mês" },
+        { label: "Quadros", blurb: "Organize ideias e rode como um fluxo" },
+      ],
+      modelsLabel: "Modelos",
+    },
+    audio: {
+      featuresLabel: "Recursos",
+      features: [
+        { label: "Texto em fala", blurb: "Leia qualquer roteiro com uma voz natural" },
+        { label: "Música", blurb: "Crie uma faixa a partir de uma descrição curta" },
+        { label: "Biblioteca", blurb: "Tudo o que você já gerou" },
+      ],
+      modelsLabel: "Modelos",
+    },
+  },
+  modelFlags: { featured: "Top", soon: "Em breve", offline: "Indisponível" },
+  navWords: {
+    home: `Início do ${brand.name}`,
+    search: "Buscar",
+    language: "Idioma",
+    languageNote: "Os preços aparecem em reais (R$) quando você escolhe Português.",
+    english: "English",
+    enterprise: "Empresas",
+    pricing: "Preços",
+    upgrade: "Fazer upgrade",
+    login: "Entrar",
+    join: "Começar",
+    library: "Biblioteca",
+    invite: "Convide um amigo e ganhe créditos",
+    account: "Sua conta",
+    openMenu: "Abrir menu",
+    closeMenu: "Fechar menu",
+    panelTitle: "Menu",
+    studios: "Estúdios",
+    pages: "Páginas",
+    menuOf: (label: string) => `Menu ${label}`,
+  },
+  bellWords: {
+    label: (n: number) => (n === 0 ? "Notificações" : n === 1 ? "Notificações, 1 não lida" : `Notificações, ${n} não lidas`),
+  },
+  accountWords: {
+    creditsHeading: "Créditos",
+    creditsHint: "Cada geração gasta créditos. O preço aparece no botão Gerar antes de você clicar.",
+    left: (amount: string) => `${amount} restantes`,
+    meter: (pct: number) => `${pct}% dos seus créditos mensais restantes`,
+    topUp: "Recarregar créditos",
+    upgrade: "Fazer upgrade do plano",
+    changePlan: "Trocar de plano",
+    get: "Assinar",
+    viewProfile: "Ver perfil",
+    settings: "Gerenciar conta",
+    library: "Sua biblioteca",
+    invite: "Convidar amigos",
+    whatsNew: "Novidades",
+    help: "Guia",
+    logOut: "Sair",
+    loggingOut: "Saindo…",
+    logOutFailed: "Não foi possível sair. Tente de novo.",
+    plan: (name: string) => `Plano ${name}`,
+    guest: "Visitante",
+    guestNote: "Crie uma conta para guardar o que você criar.",
+    createAccount: "Criar conta",
+  },
+  footerWords: {
+    legal: `© 2026 ${brand.name}.`,
+    rights: "Todos os direitos reservados.",
+    links: [{ label: "Guia" }, { label: "Novidades" }, { label: "API" }, { label: "Empresas" }, { label: "Preços" }],
+  },
+};

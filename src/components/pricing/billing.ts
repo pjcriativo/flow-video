@@ -1,5 +1,6 @@
 "use client";
 
+import { dateLocale, formatMoneyCents, localizePlan } from "@/i18n";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { pricingCopy as t, fill } from "@/content/pricing";
@@ -47,27 +48,29 @@ export const PLANS_KEY = "/api/billing/plans";
 export const SUB_KEY = "/api/billing/subscription";
 
 export function usePlans() {
-  return useSWR<PlansResponse>(PLANS_KEY, fetcher, { revalidateOnFocus: false });
+  const r = useSWR<PlansResponse>(PLANS_KEY, fetcher, { revalidateOnFocus: false });
+  const data = r.data && {
+    ...r.data,
+    plans: r.data.plans.map(localizePlan),
+    current: r.data.current && { ...r.data.current, plan: localizePlan(r.data.current.plan) },
+  };
+  return { ...r, data };
 }
 
 /** Only asked for when someone is signed in (guests included). */
 export function useSubscription(enabled: boolean) {
-  return useSWR<{ subscription: Subscription; balance: number }>(enabled ? SUB_KEY : null, fetcher);
+  const r = useSWR<{ subscription: Subscription; balance: number }>(enabled ? SUB_KEY : null, fetcher);
+  const data = r.data && { ...r.data, subscription: { ...r.data.subscription, plan: localizePlan(r.data.subscription.plan) } };
+  return { ...r, data };
 }
 
-/** 1900 -> "$19", 1583 -> "$15.83". */
+/** 1900 -> "$19", 1583 -> "$15.83". In Portuguese the same amount in reais. */
 export function money(cents: number): string {
-  const whole = cents % 100 === 0;
-  return (cents / 100).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: whole ? 0 : 2,
-    maximumFractionDigits: whole ? 0 : 2,
-  });
+  return formatMoneyCents(cents, { trimZeros: true });
 }
 
 export function day(ms: number): string {
-  return new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", year: "numeric" }).format(ms);
+  return new Intl.DateTimeFormat(dateLocale(), { day: "numeric", month: "short", year: "numeric" }).format(ms);
 }
 
 /** What paying yearly saves against twelve monthly payments, in cents. */

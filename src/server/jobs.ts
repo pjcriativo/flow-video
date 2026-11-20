@@ -7,6 +7,7 @@ import type { User } from "./auth";
 import { balance, hold, release } from "./credits";
 import { all, get, newId, parseJson, run, tx, type Param } from "./db";
 import { ApiError, badRequest, notFound } from "./errors";
+import { getSetting } from "./settings";
 import { tregMode } from "./treg";
 import { kick, outputOf } from "./worker";
 
@@ -161,7 +162,7 @@ export const DEFAULT_DAILY_BUDGET_USD = 5;
  * falls back to the default rather than to "no limit"; 0 stops paid requests.
  */
 export function dailyBudgetUsd(): number {
-  const raw = process.env.TREG_DAILY_BUDGET_USD?.trim();
+  const raw = getSetting("daily_budget_usd") || process.env.TREG_DAILY_BUDGET_USD?.trim();
   const n = raw ? Number(raw) : NaN;
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_DAILY_BUDGET_USD;
 }

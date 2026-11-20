@@ -33,6 +33,7 @@ interface UserRow {
   avatar_asset_id: string | null;
   bio: string;
   created_at: number;
+  suspended?: number;
 }
 
 function toUser(r: UserRow): User {
@@ -158,6 +159,7 @@ export function logIn(input: { email: unknown; password: unknown }): User {
   if (!verifyPassword(String(input.password ?? ""), row?.password_hash ?? null) || !row) {
     throw new AccountError("That email and password do not match.");
   }
+  if (row.suspended) throw new AccountError("This account has been suspended. Contact support.");
   return toUser(row);
 }
 
@@ -176,7 +178,7 @@ export function userFromToken(token: string): User | null {
     hash,
     now,
   );
-  if (!row) return null;
+  if (!row || row.suspended) return null;
   // "Last active" for the sessions screen. One write a minute per session at most.
   if (now - (row.seen_at ?? 0) > SEEN_EVERY) run("UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?", now, hash);
   return toUser(row);

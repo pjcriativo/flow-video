@@ -1,3 +1,4 @@
+import { LocaleProvider } from "@/i18n/provider";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Inter, Racing_Sans_One, Space_Grotesk, Space_Mono } from "next/font/google";
 import { brand } from "@/config/brand";
@@ -35,7 +36,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Hides what the visitor closed earlier before the first paint. See src/lib/closable.ts. */}
         <script dangerouslySetInnerHTML={{ __html: bootScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <LocaleProvider>{children}</LocaleProvider>
+      </body>
     </html>
   );
 }

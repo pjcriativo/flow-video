@@ -4,6 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { PRICING } from "@/config/economy";
+import { applyConfig } from "@/config/live-config";
 
 /**
  * One SQLite file, opened once per process. SQLite keeps the whole product runnable
@@ -58,7 +60,26 @@ export function db(): DatabaseSync {
   holder.db = database;
   holder.statements = new Map();
   holder.depth = 0;
+  applyPlanOverrides(database);
   return database;
+}
+
+/** Puts everything an admin saved (plans, margin, exchange rate, switched-off models) over the defaults. Runs at start-up and after each edit. */
+export function applyPlanOverrides(database: DatabaseSync = db()) {
+  const plans = database.prepare("SELECT * FROM admin_plan_overrides").all() as {
+    plan_id: string;
+    name: string;
+    price_usd: number;
+    monthly_credits: number;
+    concurrency: number;
+  }[];
+  const settings = Object.fromEntries((database.prepare("SELECT key, value FROM admin_settings WHERE key IN ('margin', 'usd_brl')").all() as { key: string; value: string }[]).map((r) => [r.key, Number(r.value)]));
+  const off = (database.prepare("SELECT model_id FROM admin_model_overrides WHERE enabled = 0").all() as { model_id: string }[]).map((r) => r.model_id);
+  applyConfig({
+    pricing: { margin: settings.margin ?? PRICING.margin, usdBrl: settings.usd_brl ?? PRICING.usdBrl },
+    plans: Object.fromEntries(plans.map((r) => [r.plan_id, { name: r.name, priceUsd: r.price_usd, monthlyCredits: r.monthly_credits, concurrency: r.concurrency }])),
+    disabledModels: off,
+  });
 }
 
 function statement(sql: string): StatementSync {

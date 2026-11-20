@@ -27,6 +27,7 @@ export const pricingCopy = {
     perMonthMonthly: "/mo, billed monthly",
     creditsUnit: "credits",
     perMonth: "/ month",
+    perYear: "/ year",
     jobsAtOnce: "jobs running at once",
     creditsKeep: "Unused credits stay in your balance",
     included: "Included in plan",

@@ -276,3 +276,32 @@ export function demoEndPeriodNow(userId: string) {
   run("UPDATE account_subscriptions SET period_start = period_start - ?, period_end = ?, updated_at = ? WHERE user_id = ?", shift, now, now, userId);
   syncSubscription(userId);
 }
+
+/**
+ * An admin gives (or takes away) a plan with no payment. The plan runs for `months`, gives the
+ * month's credits at once, and then ends on its own unless a billing provider renews it.
+ */
+export function grantPlan(userId: string, planId: string, months: number) {
+  syncSubscription(userId);
+  if (planId === "free") {
+    if (subRow(userId)) endSubscription(userId);
+    else run("UPDATE users SET plan = 'free' WHERE id = ?", userId);
+    return;
+  }
+  const now = Date.now();
+  run(
+    `INSERT INTO account_subscriptions (user_id, plan_id, interval, status, period_start, period_end, cancel_at_period_end, pending_plan_id, pending_interval, created_at, updated_at)
+     VALUES (?, ?, 'month', 'active', ?, ?, 1, NULL, NULL, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET plan_id = excluded.plan_id, interval = 'month', status = 'active',
+       period_start = excluded.period_start, period_end = excluded.period_end, cancel_at_period_end = 1,
+       pending_plan_id = NULL, pending_interval = NULL, updated_at = excluded.updated_at`,
+    userId,
+    planId,
+    now,
+    addMonths(now, months),
+    now,
+    now,
+  );
+  run("UPDATE users SET plan = ? WHERE id = ?", planId, userId);
+  grantMonthlyCredits(subRow(userId)!, now);
+}

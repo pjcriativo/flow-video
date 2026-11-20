@@ -9,8 +9,13 @@
 /** Retail value of one credit in US dollars. */
 export const CREDIT_USD = 0.05;
 
-/** Multiplier applied to the provider price. 1.4 = 40 % gross margin on cost. */
-export const MARGIN = 1.4;
+/**
+ * Prices an admin can change from the panel. `margin` multiplies the provider price (1.4 = 40 %
+ * on cost). `usdBrl` is the exchange rate used to show prices in reais; plans are always
+ * defined in dollars. The server applies the saved values at start-up and after each edit, and
+ * sends them to the browser with the session.
+ */
+export const PRICING = { margin: 1.4, usdBrl: 5.5 };
 
 export const MILLI = 1000;
 
@@ -20,7 +25,7 @@ export const PRICE_STEP = 100;
 /** Provider price in USD -> what we charge, in millicredits. Never less than one step. */
 export function usdToMillicredits(usd: number): number {
   if (!Number.isFinite(usd) || usd <= 0) return PRICE_STEP;
-  const exact = (usd * MARGIN * MILLI) / CREDIT_USD;
+  const exact = (usd * PRICING.margin * MILLI) / CREDIT_USD;
   // The small epsilon stops 3.3600000001 from rounding up a whole step.
   return Math.max(PRICE_STEP, Math.ceil(exact / PRICE_STEP - 1e-6) * PRICE_STEP);
 }

@@ -3,6 +3,7 @@ import "server-only";
 import { lookup } from "node:dns/promises";
 import net from "node:net";
 import { catalogEndpoint } from "@/registry/quote";
+import { getSecret, getSetting } from "./settings";
 
 /**
  * The only file that talks to Treg (https://treg.to), the gateway in front of every
@@ -19,11 +20,12 @@ import { catalogEndpoint } from "@/registry/quote";
  */
 
 const base = () => (process.env.TREG_BASE_URL ?? "https://treg.to").replace(/\/+$/, "");
-const token = () => (process.env.TREG_TOKEN ?? "").trim();
+/** The key saved in the admin panel wins over the environment. */
+const token = () => (getSecret("treg_token") || (process.env.TREG_TOKEN ?? "")).trim();
 
 /** `mock` makes every generation locally, with no provider call and no cost. */
 export function tregMode(): "live" | "mock" {
-  const mode = process.env.TREG_MODE;
+  const mode = getSetting("treg_mode") || process.env.TREG_MODE;
   if (mode === "mock") return "mock";
   if (mode === "live") return "live";
   return token() ? "live" : "mock";

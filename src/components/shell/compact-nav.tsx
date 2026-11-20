@@ -1,5 +1,6 @@
 "use client";
 
+import { LOCALES, getLocale, setLocale } from "@/i18n";
 import { Building2, Crown, Folder, Gift, Languages, Search } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -7,6 +8,7 @@ import { LogoMark } from "@/components/brand/logo";
 import { LoginDialog } from "@/components/entry/login-dialog";
 import { SearchDialog } from "@/components/entry/search-dialog";
 import { brand } from "@/config/brand";
+import { navWords } from "@/content/shell";
 import { navPrimary, navStudios, pricingBadge, routes, type NavId, type NavLink } from "@/content/site";
 import { useSession } from "@/lib/session";
 import { AccountMenu } from "./account-menu";
@@ -68,18 +70,22 @@ function PlansLink({ label }: { label: string }) {
   );
 }
 
-/** The app is in English only for now, and says so. */
+/** English or Portuguese. Portuguese shows prices in reais. */
 function LanguageButton() {
   return (
     <span className="hidden sm:inline-flex">
       <Popover>
-        <PopoverTrigger aria-label="Language" className={iconButtonClass(24, "dim")}>
+        <PopoverTrigger aria-label={navWords.language} className={iconButtonClass(24, "dim")}>
           <Languages className="size-4" strokeWidth={1.5} aria-hidden />
         </PopoverTrigger>
         <PopoverContent align="end" className="w-[200px]">
-          <MenuLabel>Language</MenuLabel>
-          <MenuItem selected>English</MenuItem>
-          <p className="px-2 pt-1 pb-2 text-xs leading-4 text-text-secondary">More languages are on the way.</p>
+          <MenuLabel>{navWords.language}</MenuLabel>
+          {LOCALES.map((l) => (
+            <MenuItem key={l.id} selected={getLocale() === l.id} onClick={() => setLocale(l.id)}>
+              {l.label}
+            </MenuItem>
+          ))}
+          <p className="px-2 pt-1 pb-2 text-xs leading-4 text-text-secondary">{navWords.languageNote}</p>
         </PopoverContent>
       </Popover>
     </span>

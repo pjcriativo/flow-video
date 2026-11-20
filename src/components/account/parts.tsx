@@ -1,5 +1,6 @@
 "use client";
 
+import { dateLocale, formatMoneyCents } from "@/i18n";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { common, gate } from "@/content/account";
@@ -190,11 +191,11 @@ export function GuestBanner({ next }: { next: string }) {
 
 /** Dates and times for the account pages, in the member's own locale. */
 export function formatDate(ms: number) {
-  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(ms);
+  return new Intl.DateTimeFormat(dateLocale(), { day: "numeric", month: "short", year: "numeric" }).format(ms);
 }
 export function formatDateTime(ms: number) {
-  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(ms);
+  return new Intl.DateTimeFormat(dateLocale(), { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(ms);
 }
 export function formatUsd(cents: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+  return formatMoneyCents(cents);
 }

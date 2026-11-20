@@ -228,8 +228,8 @@ export function PlanCard({
       )}
 
       <Section title={t.card.billing}>
-        <Line label={t.card.billedMonthly} value={`${money(plan.priceMonthCents)} / month`} />
-        <Line label={t.card.billedYearly} value={`${money(plan.priceYearCents)} / year`} />
+        <Line label={t.card.billedMonthly} value={`${money(plan.priceMonthCents)} ${t.card.perMonth}`} />
+        <Line label={t.card.billedYearly} value={`${money(plan.priceYearCents)} ${t.card.perYear}`} />
         {saving > 0 ? (
           <Line label={t.card.yearlySaving} value={`${money(saving)} (${plan.yearlySavingPercent}%)`} />
         ) : null}

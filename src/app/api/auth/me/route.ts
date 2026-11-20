@@ -1,4 +1,5 @@
 import { syncSubscription } from "@/server/account/subscription";
+import { currentConfig } from "@/config/live-config";
 import { publicUser, userById } from "@/server/auth";
 import { balance } from "@/server/credits";
 import { publicRoute } from "@/server/http";
@@ -9,7 +10,8 @@ import { publicRoute } from "@/server/http";
  * was away catches up: the new period and its credits show at once.
  */
 export const GET = publicRoute(({ user }) => {
-  if (!user) return { user: null, balance: 0 };
+  const config = currentConfig();
+  if (!user) return { user: null, balance: 0, config };
   if (!user.isGuest) syncSubscription(user.id);
-  return { user: publicUser(userById(user.id) ?? user), balance: balance(user.id) };
+  return { user: publicUser(userById(user.id) ?? user), balance: balance(user.id), config };
 });

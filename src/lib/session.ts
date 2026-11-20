@@ -1,16 +1,26 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { api, fetcher, type SessionUser } from "./api";
+import { applyConfig, type LiveConfig } from "@/config/live-config";
+import { api, type SessionUser } from "./api";
 
 export interface Session {
   /** Null when nobody is signed in. A guest is a real account with `isGuest: true`. */
   user: SessionUser | null;
   /** Millicredits. Format with `formatCredits` from "@/config/economy". */
   balance: number;
+  /** Margin, exchange rate, plans and switched-off models, set by the admin. */
+  config?: LiveConfig;
 }
 
 const KEY = "/api/auth/me";
+
+/** Reads the session and puts the admin's settings (prices, plans, models) in force in this browser. */
+async function readSession(): Promise<Session> {
+  const s = await api<Session>(KEY);
+  applyConfig(s.config);
+  return s;
+}
 
 /**
  * Who is using the app. Pages are static shells, so this is read in the browser.
@@ -18,7 +28,7 @@ const KEY = "/api/auth/me";
  * decide between "Login" and the avatar.
  */
 export function useSession() {
-  const { data, isLoading } = useSWR<Session>(KEY, fetcher, { revalidateOnFocus: true, dedupingInterval: 2000 });
+  const { data, isLoading } = useSWR<Session>(KEY, readSession, { revalidateOnFocus: true, dedupingInterval: 2000 });
   const user = data?.user ?? null;
   return {
     user,
@@ -49,7 +59,7 @@ export function setBalance(balance: number): Promise<unknown> {
  * Call it before the first write a signed-out visitor makes (Generate, upload, like).
  */
 export async function ensureSession(): Promise<Session> {
-  const me = await api<Session>(KEY);
+  const me = await readSession();
   if (me.user) return me;
   const guest = await api<Session>("/api/auth/guest", { method: "POST" });
   await setSession(guest);
